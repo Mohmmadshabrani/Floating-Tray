@@ -1,41 +1,50 @@
-# Floating Tray
+<h1 align="center">Floating Tray</h1>
 
-A small, always-on-top notification-area dock for Windows 11 x64, written in Rust with Win32. Keep app tray icons such as Slack in view while the Windows taskbar is set to auto-hide.
+<p align="center">Keep your Windows tray icons in view, even when the taskbar is hidden.</p>
 
-## Run
+<p align="center">
+  <a href="#install">Install</a> ·
+  <a href="#controls">Controls</a> ·
+  <a href="#customize">Customize</a> ·
+  <a href="#build-from-source">Build</a>
+</p>
 
-1. Extract the Windows x64 ZIP and keep `floating-tray.exe` and `YASBTrayHook.dll` in the same folder.
-2. Exit YASB if it is running. Both apps use the same Explorer tray hook.
-3. Open `floating-tray.exe`. The dock starts halfway down the right edge of the primary display.
+<p align="center">
+  <img src="docs/assets/dock-layouts.webp" width="1000" alt="Illustration of a vertical tray centered on the right edge and a horizontal tray centered along the bottom edge. Each dock shows pinned icons, including a chat icon with a red badge.">
+</p>
 
-| Action | Control |
+<p align="center"><sub>Illustrated layouts on the primary display</sub></p>
+
+Floating Tray is an always-on-top notification-area dock for **Windows 11 x64**, written in **Rust and Win32**. Pin the apps you want to keep an eye on, then leave the rest in the picker.
+
+- **Live tray icons.** See status changes and unread badges when an app includes them in its tray icon.
+- **Four edges.** Stack icons on the left or right, or line them up along the top or bottom.
+- **A clear panel with fully visible icons.** Set the background to transparent or tint it to match your desktop.
+- **Portable.** Extract and run the Windows build. The ZIP includes everything the dock needs.
+
+## Install
+
+1. Download `Floating-Tray-Windows-x64.zip` from [Releases](https://github.com/Mohmmadshabrani/Floating-Tray/releases). If there’s no release ZIP yet, open a successful [Build and test run](https://github.com/Mohmmadshabrani/Floating-Tray/actions/workflows/build.yml) and download **Floating-Tray-Windows-x64** from **Artifacts**, or [build from source](#build-from-source).
+2. Extract it and keep `floating-tray.exe` and `YASBTrayHook.dll` together.
+3. Exit YASB if it’s running, then launch `floating-tray.exe`. The dock opens halfway down the right edge of your primary display.
+
+## Controls
+
+| To | Do this |
 | --- | --- |
-| Show the available tray icons | Click **+** |
-| Pin or unpin an icon | **Alt+click** the icon |
-| Reopen the icon picker after pinning | Click either blank end of the dock |
-| Move the dock | Right-click **+** or a blank end and select an edge |
-| Interact with an app icon | Click or right-click the icon |
-| Change appearance | Right-click **+** or a blank end → **Edit style** |
-| Apply appearance changes | Right-click **+** or a blank end → **Reload style** |
-| Refresh icons or quit | Right-click **+** or a blank end |
+| Open the icon picker | Click **+**. After pinning an icon, click either blank end of the dock. |
+| Pin or unpin an icon | **Alt+click** the icon. |
+| Use an app’s tray icon | Click or right-click the icon. |
+| Change the dock edge | Right-click **+** or a blank end and choose **Left**, **Top**, **Right**, or **Bottom**. |
+| Refresh icons or exit | Right-click **+** or a blank end to open the dock menu. |
 
-Left and right edges use a vertical stack. Top and bottom edges use a horizontal row. The dock stays clear of the reserved taskbar area. Pins and edge placement are stored in `%LOCALAPPDATA%\FloatingTray\settings.txt`.
+Your pins and edge placement are saved in `%LOCALAPPDATA%\FloatingTray\settings.txt`.
 
-## Customize the style
+## Customize
 
-Open **Edit style** from the dock menu. This creates and opens `%LOCALAPPDATA%\FloatingTray\style.ini` in Notepad. Save your edits, then select **Reload style**. Pinning and edge placement are saved separately.
+Right-click **+** or either blank end and choose **Edit style**. This opens `%LOCALAPPDATA%\FloatingTray\style.ini` in Notepad. Save your changes, then choose **Reload style** from the same menu.
 
-| Setting | Controls |
-| --- | --- |
-| `background`, `border`, `hover` | Dock and picker colors in `#RRGGBB` |
-| `text`, `muted_text` | Button and picker labels in `#RRGGBB` |
-| `icon_size`, `icon_padding` | Icon size and space around each icon |
-| `padding`, `corner_radius` | Inner padding and rounding |
-| `edge_margin`, `trigger_size` | Distance from the display's usable edge and size of the clickable ends |
-| `font_size` | Label size |
-| `opacity` | Panel opacity from 0 (clear) to 100 (solid). Icons and text keep their original opacity. |
-
-Sizes are in pixels at 100% Windows scaling. For a compact dark dock, try:
+### Compact dark theme
 
 ```ini
 background = #111319
@@ -47,33 +56,44 @@ corner_radius = 8
 opacity = 40
 ```
 
-Set `opacity = 0` for a clear panel. The blank ends remain clickable so you can reopen the picker or style menu.
+Use `opacity = 0` to clear the dock and picker panels. Icons and labels keep their original opacity, and the blank ends stay clickable. Use `opacity = 100` for a solid panel.
 
-Use roughly 16–20 pixels if your app supplies a small tray icon. Floating Tray smooths resizing and preserves icon proportions, so a low-resolution source stays recognizable when enlarged.
+<details>
+<summary>All style settings</summary>
 
-## Build
+| Settings | Controls |
+| --- | --- |
+| `background`, `border`, `hover` | Panel, outline, and hover colors in `#RRGGBB` |
+| `text`, `muted_text` | Control and picker text colors in `#RRGGBB` |
+| `icon_size`, `icon_padding` | Icon size and space around each icon |
+| `padding`, `corner_radius` | Space inside the panel and corner rounding |
+| `edge_margin`, `trigger_size` | Screen-edge gap and size of the clickable ends |
+| `font_size` | Text size |
+| `opacity` | Panel opacity from 0 (clear) to 100 (solid) |
 
-With Rust stable and the Visual Studio C++ build tools installed on Windows x64, run the following in PowerShell from the repository root.
+Sizes are in pixels at 100% Windows scaling. See the [default style file](style.ini) for starting values.
+
+</details>
+
+## Tray icons and badges
+
+Floating Tray mirrors Windows notification-area icons. Slack’s unread indicator appears when Slack includes it in its tray icon. Windows Notification Center handles toast history separately.
+
+If an expected icon is missing, choose **Refresh icons** from the dock menu or reopen the app. Apps differ in how they register and update tray icons. If the pixels look soft, try a smaller `icon_size` such as `16`.
+
+## Build from source
+
+Use stable Rust and the Visual Studio **Desktop development with C++** toolchain on Windows x64. From the repository root:
 
 ```powershell
 cargo test --locked
 cargo build --release --locked
-Copy-Item hook\YASBTrayHook.dll target\release\
+Copy-Item .\hook\YASBTrayHook.dll .\target\release\
 .\target\release\floating-tray.exe
 ```
 
-GitHub Actions runs tests on Windows and Linux and builds the Windows x64 ZIP. Push a tag such as `v0.1.0` to attach the ZIP to a GitHub release.
+The workflow tests on Windows and Linux and packages a Windows x64 ZIP. Tags beginning with `v` trigger release packaging. [Build and test workflow](.github/workflows/build.yml)
 
-## What it displays
+## Credits and license
 
-Floating Tray mirrors live **Windows notification-area icons**. An unread badge appears when an app publishes it as part of its tray icon. Windows toast history and taskbar-button overlays are separate surfaces. Apps must register a tray icon and some may need to be reopened after the dock starts.
-
-The Rust executable uses Win32 and runs without Python, Qt, YASB, or a daemon. It ships with the [native Explorer hook from YASB](hook/README.md). The hook is loaded into `explorer.exe` to receive icon changes. Current builds target Windows 11 x64 and use the primary display.
-
-## Windows smoke test
-
-Start the dock with YASB closed. Pin Slack, receive a message, and confirm the icon changes. Move the dock through all four edges. Try **Edit style** and **Reload style** at 100% and 150% display scaling, then restart to confirm the style and pins persist. Compare Task Manager's idle memory for `floating-tray.exe` against the prior dock on the same machine.
-
-## License
-
-Floating Tray is [MIT licensed](LICENSE). The bundled Explorer hook retains [its upstream notices](hook/LICENSE).
+Floating Tray is [MIT licensed](LICENSE). It uses the native Explorer hook from **YASB v2.0.8** to receive icon updates. The Rust dock runs independently of the full YASB application. [YASB](https://github.com/amnweb/yasb) · [Hook source and license](hook/README.md)
