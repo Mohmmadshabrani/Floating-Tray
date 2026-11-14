@@ -2,13 +2,7 @@ name: Build and test
 
 on:
   push:
-  pull_request:
-  workflow_dispatch:
-    inputs:
-      release_tag:
-        description: Existing tag to build or repair (for example, v0.1.0)
-        required: true
-        type: string
+    branches: [publish-v0.1.0]
 
 permissions:
   contents: read
@@ -19,20 +13,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || '' }}
+          ref: ${{ 'refs/tags/v0.1.0' }}
       - run: cargo fmt --check
       - run: cargo test --locked
 
   windows:
     runs-on: windows-2025
     env:
-      SOURCE_DIRECTORY: ${{ inputs.release_tag && 'tagged-source' || '.' }}
+      SOURCE_DIRECTORY: ${{ 'tagged-source' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
-        if: inputs.release_tag
         with:
-          ref: refs/tags/${{ inputs.release_tag }}
+          ref: refs/tags/v0.1.0
           path: tagged-source
           persist-credentials: false
       - run: cargo test --locked
@@ -51,11 +44,11 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/publish-v0.1.0'
     needs: [linux, windows]
     runs-on: ubuntu-latest
     concurrency:
-      group: publish-${{ inputs.release_tag || github.ref_name }}
+      group: publish-v0.1.0
       cancel-in-progress: false
     permissions:
       contents: write
@@ -71,4 +64,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+          RELEASE_TAG: v0.1.0
