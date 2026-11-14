@@ -1,4 +1,5 @@
 use crate::{
+    composite::{self, Pixel},
     hook::{self, Event, Inbox, Instance, Monitor, wide},
     model::{Edge, Item, Settings, Tray},
     style::{self, Style},
@@ -9,10 +10,10 @@ use std::{
     mem::{size_of, zeroed},
     path::{Path, PathBuf},
     process::Command,
-    ptr::{copy_nonoverlapping, null, null_mut},
+    ptr::{null, null_mut},
 };
 use windows_sys::Win32::{
-    Foundation::{CloseHandle, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM},
+    Foundation::{CloseHandle, HWND, LPARAM, LRESULT, POINT, RECT, SIZE, WPARAM},
     Graphics::Gdi::*,
     System::{
         LibraryLoader::GetModuleHandleW,
@@ -32,6 +33,7 @@ use windows_sys::Win32::{
 
 const OVERFLOW_COLUMNS: usize = 6;
 const WM_MOUSELEAVE: u32 = 0x02A3;
+const PAINT_FRAME: u32 = WM_APP + 11;
 const NEXT: usize = usize::MAX - 1;
 const PREVIOUS: usize = usize::MAX - 2;
 
@@ -50,6 +52,7 @@ struct View {
     hover: Option<usize>,
     status: String,
     geometry: Option<(i32, i32, i32, i32, i32)>,
+    repaint_pending: bool,
 }
 
 struct Ui {
@@ -157,7 +160,6 @@ pub fn run() -> io::Result<()> {
             popup_open: false,
             page: 0,
         };
-        ui.apply_opacity();
         ui.layout();
         UI.with(|slot| slot.replace(Some(ui)));
         ShowWindow(dock, SW_SHOWNOACTIVATE);
@@ -224,16 +226,17 @@ unsafe extern "system" fn window_proc(
             WM_MOUSEWHEEL if is_popup => ui.page_by(if (wparam >> 16) as i16 > 0 { -1 } else { 1 }),
             WM_MOUSEMOVE => ui.hover(hwnd, is_popup, lparam),
             WM_MOUSELEAVE => ui.leave(hwnd, is_popup),
-            WM_PAINT => paint(
-                hwnd,
-                if is_popup {
-                    &ui.popup_view
+            PAINT_FRAME => {
+                let view = if is_popup {
+                    &mut ui.popup_view
                 } else {
-                    &ui.dock_view
-                },
-                &ui.tray,
-                ui.style,
-            ),
+                    &mut ui.dock_view
+                };
+                view.repaint_pending = false;
+                if !is_popup || ui.popup_open {
+                    paint(hwnd, view, &ui.tray, ui.style);
+                }
+            }
             WM_ERASEBKGND => return true,
             WM_CLOSE if is_popup => ui.hide_popup(),
             WM_DESTROY if !is_popup => unsafe { PostQuitMessage(0) },
@@ -350,7 +353,7 @@ impl Ui {
             if popup {
                 self.popup_view.status = text.unwrap_or("Alt+click to pin an icon").to_owned();
             }
-            unsafe { InvalidateRect(hwnd, null(), 0) };
+            request_repaint(hwnd, self.view_mut(popup));
         }
         if previous.is_none() && target.is_some() {
             let mut tracking = TRACKMOUSEEVENT {
@@ -368,7 +371,7 @@ impl Ui {
         if popup && self.connected && !self.popup_view.slots.is_empty() {
             self.popup_view.status = "Alt+click to pin an icon".to_owned();
         }
-        unsafe { InvalidateRect(hwnd, null(), 0) };
+        request_repaint(hwnd, self.view_mut(popup));
     }
 
     fn page_by(&mut self, amount: isize) {
@@ -390,14 +393,6 @@ impl Ui {
             })
         {
             show_error(&format!("Settings could not be saved. {error}"));
-        }
-    }
-
-    fn apply_opacity(&self) {
-        let alpha = (self.style.opacity * 255 / 100) as u8;
-        unsafe {
-            SetLayeredWindowAttributes(self.dock, 0, alpha, LWA_ALPHA);
-            SetLayeredWindowAttributes(self.popup, 0, alpha, LWA_ALPHA);
         }
     }
 
@@ -614,7 +609,6 @@ fn show_menu(dock: HWND, edge: Edge) {
                             Ok(style) => UI.with(|slot| {
                                 if let Some(ui) = slot.borrow_mut().as_mut() {
                                     ui.style = style;
-                                    ui.apply_opacity();
                                     ui.layout();
                                 }
                             }),
@@ -683,34 +677,19 @@ fn work_area() -> RECT {
 }
 
 fn place(window: HWND, view: &mut View, bounds: RECT, radius: i32) {
-    let width = bounds.right - bounds.left;
-    let height = bounds.bottom - bounds.top;
-    let geometry = (bounds.left, bounds.top, width, height, radius);
-    unsafe {
-        if view.geometry == Some(geometry) {
-            InvalidateRect(window, null(), 0);
-            return;
-        }
-        view.geometry = Some(geometry);
-        let radius = radius.min(width).min(height);
-        let region = if radius > 0 {
-            CreateRoundRectRgn(0, 0, width + 1, height + 1, radius, radius)
-        } else {
-            CreateRectRgn(0, 0, width, height)
-        };
-        if !region.is_null() && SetWindowRgn(window, region, 1) == 0 {
-            DeleteObject(region);
-        }
-        SetWindowPos(
-            window,
-            HWND_TOPMOST,
-            bounds.left,
-            bounds.top,
-            width,
-            height,
-            SWP_NOACTIVATE,
-        );
-        InvalidateRect(window, null(), 0);
+    view.geometry = Some((
+        bounds.left,
+        bounds.top,
+        bounds.right - bounds.left,
+        bounds.bottom - bounds.top,
+        radius,
+    ));
+    request_repaint(window, view);
+}
+
+fn request_repaint(window: HWND, view: &mut View) {
+    if !view.repaint_pending {
+        view.repaint_pending = unsafe { PostMessageW(window, PAINT_FRAME, 0, 0) } != 0;
     }
 }
 
@@ -723,39 +702,189 @@ fn rect(x: i32, y: i32, width: i32, height: i32) -> RECT {
     }
 }
 
-fn paint(hwnd: HWND, view: &View, tray: &Tray, style: Style) {
-    unsafe {
-        let mut paint: PAINTSTRUCT = zeroed();
-        let screen = BeginPaint(hwnd, &mut paint);
-        if screen.is_null() {
-            return;
+// GDI draws into our DIBs; read their pixels only after flushing pending draws.
+struct Surface {
+    dc: HDC,
+    bitmap: HBITMAP,
+    previous: HGDIOBJ,
+    bits: *mut Pixel,
+    width: usize,
+    height: usize,
+}
+
+impl Surface {
+    fn new(width: i32, height: i32) -> Option<Self> {
+        unsafe {
+            let mut info: BITMAPINFO = zeroed();
+            info.bmiHeader.biSize = size_of::<BITMAPINFOHEADER>() as u32;
+            info.bmiHeader.biWidth = width;
+            info.bmiHeader.biHeight = -height;
+            info.bmiHeader.biPlanes = 1;
+            info.bmiHeader.biBitCount = 32;
+            info.bmiHeader.biCompression = BI_RGB;
+            let mut bits = null_mut();
+            let dc = CreateCompatibleDC(null_mut());
+            if dc.is_null() {
+                return None;
+            }
+            let bitmap = CreateDIBSection(dc, &info, DIB_RGB_COLORS, &mut bits, null_mut(), 0);
+            if bitmap.is_null() {
+                DeleteDC(dc);
+                return None;
+            }
+            let previous = SelectObject(dc, bitmap);
+            if previous.is_null() || bits.is_null() {
+                DeleteDC(dc);
+                DeleteObject(bitmap);
+                return None;
+            }
+            std::ptr::write_bytes(bits.cast::<Pixel>(), 0, width as usize * height as usize);
+            Some(Self {
+                dc,
+                bitmap,
+                previous,
+                bits: bits.cast(),
+                width: width as usize,
+                height: height as usize,
+            })
         }
-        let mut area: RECT = zeroed();
-        GetClientRect(hwnd, &mut area);
-        let width = area.right;
-        let height = area.bottom;
-        let dpi = GetDpiForWindow(hwnd).max(96) as i32;
-        let scaled = |value| value * dpi / 96;
-        let buffer = CreateCompatibleDC(screen);
-        let bitmap = CreateCompatibleBitmap(screen, width, height);
-        let buffered = !buffer.is_null() && !bitmap.is_null();
-        let previous = if buffered {
-            SelectObject(buffer, bitmap)
-        } else {
-            null_mut()
+    }
+
+    fn pixels(&mut self) -> &mut [Pixel] {
+        unsafe {
+            GdiFlush();
+            std::slice::from_raw_parts_mut(self.bits, self.width * self.height)
+        }
+    }
+}
+
+impl Drop for Surface {
+    fn drop(&mut self) {
+        unsafe {
+            SelectObject(self.dc, self.previous);
+            DeleteObject(self.bitmap);
+            DeleteDC(self.dc);
+        }
+    }
+}
+
+fn paint(hwnd: HWND, view: &View, tray: &Tray, style: Style) {
+    let Some((left, top, width, height, radius)) = view.geometry else {
+        return;
+    };
+    let Some(mut surface) = Surface::new(width, height) else {
+        return;
+    };
+
+    let dpi = unsafe { GetDpiForWindow(hwnd) }.max(96) as i32;
+    let scaled = |value| value * dpi / 96;
+    let area = rect(0, 0, width, height);
+    fill(surface.dc, &area, style.background);
+    rounded(surface.dc, area, radius, style.background, style.border);
+
+    let mut labels = Vec::new();
+    for slot in &view.slots {
+        if view.hover == Some(slot.target) {
+            let mut bounds = slot.bounds;
+            unsafe { InflateRect(&mut bounds, -scaled(1), -scaled(1)) };
+            rounded(
+                surface.dc,
+                bounds,
+                scaled(10).min(radius),
+                style.hover,
+                style.hover,
+            );
+        }
+        let label = match slot.target {
+            usize::MAX if view.slots.len() == 1 => "+",
+            NEXT => "›",
+            PREVIOUS => "‹",
+            _ => continue,
         };
-        let dc = if buffered { buffer } else { screen };
-        fill(dc, &area, style.background);
-        rounded(
-            dc,
-            area,
-            scaled(2 * style.corner_radius),
-            style.background,
-            style.border,
+        labels.push((label, slot.bounds, style.text));
+    }
+
+    if !view.status.is_empty() {
+        let footer_height = scaled((style.font_size + 10).max(28));
+        let side = footer_height + scaled(style.padding);
+        let footer = rect(
+            side,
+            height - side,
+            (width - 2 * side).max(1),
+            footer_height,
         );
-        SetBkMode(dc, TRANSPARENT as i32);
+        labels.push((&view.status, footer, style.muted_text));
+    }
+
+    // Apply panel opacity before compositing labels and tray icons above it.
+    let alpha = composite::panel_alpha(style.opacity);
+    let stride = width as usize;
+    let rows = height as usize;
+    let pixels = surface.pixels();
+    for pixel in pixels.iter_mut() {
+        composite::premultiply(pixel, alpha);
+    }
+    for slot in &view.slots {
+        if let Some(item) = tray.items.get(slot.target) {
+            draw_icon(
+                pixels,
+                stride,
+                rows,
+                item,
+                slot.bounds,
+                scaled(style.icon_size) as usize,
+            );
+        }
+    }
+    if !labels.is_empty() {
+        draw_labels(pixels, width, height, scaled(style.font_size), &labels);
+    }
+
+    composite::clip_corners(pixels, stride, rows, (radius / 2) as usize);
+
+    let size = SIZE {
+        cx: width,
+        cy: height,
+    };
+    let position = POINT { x: left, y: top };
+    let origin = POINT { x: 0, y: 0 };
+    let blend = BLENDFUNCTION {
+        BlendOp: AC_SRC_OVER as u8,
+        BlendFlags: 0,
+        SourceConstantAlpha: 255,
+        AlphaFormat: AC_SRC_ALPHA as u8,
+    };
+    unsafe {
+        UpdateLayeredWindow(
+            hwnd,
+            null_mut(),
+            &position,
+            &size,
+            surface.dc,
+            &origin,
+            0,
+            &blend,
+            ULW_ALPHA,
+        );
+    }
+}
+
+fn draw_labels(
+    pixels: &mut [Pixel],
+    width: i32,
+    height: i32,
+    font_size: i32,
+    labels: &[(&str, RECT, u32)],
+) {
+    let Some(mut mask) = Surface::new(width, height) else {
+        return;
+    };
+    fill(mask.dc, &rect(0, 0, width, height), 0);
+    unsafe {
+        // A grayscale text mask yields clean edges over any desktop color.
+        SetBkMode(mask.dc, TRANSPARENT as i32);
         let font = CreateFontW(
-            -scaled(style.font_size),
+            -font_size,
             0,
             0,
             0,
@@ -766,71 +895,38 @@ fn paint(hwnd: HWND, view: &View, tray: &Tray, style: Style) {
             DEFAULT_CHARSET as u32,
             0,
             0,
-            CLEARTYPE_QUALITY as u32,
+            ANTIALIASED_QUALITY as u32,
             0,
             wide("Segoe UI").as_ptr(),
         );
-        let old_font = if font.is_null() {
+        let previous = if font.is_null() {
             null_mut()
         } else {
-            SelectObject(dc, font)
+            SelectObject(mask.dc, font)
         };
-
-        for slot in &view.slots {
-            let hover = view.hover == Some(slot.target);
-            if hover {
-                let mut bounds = slot.bounds;
-                InflateRect(&mut bounds, -scaled(1), -scaled(1));
-                rounded(
-                    dc,
-                    bounds,
-                    scaled(10).min(scaled(2 * style.corner_radius)),
-                    style.hover,
-                    style.hover,
-                );
-            }
-            if let Some(item) = tray.items.get(slot.target) {
-                let size = scaled(style.icon_size) as usize;
-                draw_icon(dc, item, slot.bounds, size);
-            } else if slot.target == usize::MAX && view.slots.len() == 1 {
-                draw_text(dc, "+", slot.bounds, style.text);
-            } else if slot.target == NEXT || slot.target == PREVIOUS {
-                draw_text(
-                    dc,
-                    if slot.target == NEXT { "›" } else { "‹" },
-                    slot.bounds,
-                    style.text,
-                );
-            }
+        for &(text, bounds, _) in labels {
+            draw_text(mask.dc, text, bounds, 0xffffff);
         }
-        if !view.status.is_empty() {
-            let footer_height = scaled((style.font_size + 10).max(28));
-            let side = footer_height + scaled(style.padding);
-            let footer = rect(
-                side,
-                height - side,
-                (width - 2 * side).max(1),
-                footer_height,
-            );
-            draw_text(dc, &view.status, footer, style.muted_text);
-        }
-        if !old_font.is_null() {
-            SelectObject(dc, old_font);
+        if !previous.is_null() {
+            SelectObject(mask.dc, previous);
         }
         if !font.is_null() {
             DeleteObject(font);
         }
-        if buffered {
-            BitBlt(screen, 0, 0, width, height, dc, 0, 0, SRCCOPY);
-            SelectObject(buffer, previous);
+    }
+    let mask = mask.pixels();
+    for &(_, bounds, color) in labels {
+        for y in bounds.top.max(0)..bounds.bottom.min(height) {
+            for x in bounds.left.max(0)..bounds.right.min(width) {
+                let index = (y * width + x) as usize;
+                let coverage = mask[index][0];
+                if coverage > 0 {
+                    let mut pixel = [(color >> 16) as u8, (color >> 8) as u8, color as u8, 0];
+                    composite::premultiply(&mut pixel, coverage);
+                    composite::over(&mut pixels[index], pixel);
+                }
+            }
         }
-        if !bitmap.is_null() {
-            DeleteObject(bitmap);
-        }
-        if !buffer.is_null() {
-            DeleteDC(buffer);
-        }
-        EndPaint(hwnd, &paint);
     }
 }
 
@@ -885,7 +981,14 @@ fn draw_text(dc: HDC, text: &str, mut area: RECT, color: u32) {
     }
 }
 
-fn draw_icon(dc: HDC, item: &Item, area: RECT, size: usize) {
+fn draw_icon(
+    pixels: &mut [Pixel],
+    width: usize,
+    height: usize,
+    item: &Item,
+    area: RECT,
+    size: usize,
+) {
     let Some(source) = &item.image else { return };
     let mut cached = item.rendered_icon.borrow_mut();
     if cached.as_ref().map(|(size, _)| *size) != Some(size) {
@@ -894,52 +997,23 @@ fn draw_icon(dc: HDC, item: &Item, area: RECT, size: usize) {
     let Some((_, icon)) = cached.as_ref() else {
         return;
     };
-    let (width, height) = (icon.width as i32, icon.height as i32);
-    let x = (area.left + area.right - width) / 2;
-    let y = (area.top + area.bottom - height) / 2;
-    unsafe {
-        let mut info: BITMAPINFO = zeroed();
-        info.bmiHeader.biSize = size_of::<BITMAPINFOHEADER>() as u32;
-        info.bmiHeader.biWidth = width;
-        info.bmiHeader.biHeight = -height;
-        info.bmiHeader.biPlanes = 1;
-        info.bmiHeader.biBitCount = 32;
-        info.bmiHeader.biCompression = BI_RGB;
-        let mut bits = null_mut();
-        let bitmap = CreateDIBSection(dc, &info, DIB_RGB_COLORS, &mut bits, null_mut(), 0);
-        if bitmap.is_null() {
-            return;
+    let left = (area.left + area.right - icon.width as i32) / 2;
+    let top = (area.top + area.bottom - icon.height as i32) / 2;
+    for (y, row) in icon.bgra.chunks_exact(icon.width * 4).enumerate() {
+        let dest_y = top + y as i32;
+        if !(0..height as i32).contains(&dest_y) {
+            continue;
         }
-        if bits.is_null() {
-            DeleteObject(bitmap);
-            return;
+        for (x, source) in row.chunks_exact(4).enumerate() {
+            let dest_x = left + x as i32;
+            if (0..width as i32).contains(&dest_x) {
+                let index = dest_y as usize * width + dest_x as usize;
+                composite::over(
+                    &mut pixels[index],
+                    [source[0], source[1], source[2], source[3]],
+                );
+            }
         }
-        let source_dc = CreateCompatibleDC(dc);
-        if !source_dc.is_null() {
-            copy_nonoverlapping(icon.bgra.as_ptr(), bits.cast(), icon.bgra.len());
-            let previous = SelectObject(source_dc, bitmap);
-            AlphaBlend(
-                dc,
-                x,
-                y,
-                width,
-                height,
-                source_dc,
-                0,
-                0,
-                width,
-                height,
-                BLENDFUNCTION {
-                    BlendOp: AC_SRC_OVER as u8,
-                    BlendFlags: 0,
-                    SourceConstantAlpha: 255,
-                    AlphaFormat: AC_SRC_ALPHA as u8,
-                },
-            );
-            SelectObject(source_dc, previous);
-            DeleteDC(source_dc);
-        }
-        DeleteObject(bitmap);
     }
 }
 
