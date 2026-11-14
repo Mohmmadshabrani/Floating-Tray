@@ -5,7 +5,7 @@ Extract the ZIP, exit YASB if it is running, then open `floating-tray.exe`. Keep
 - Click **+** to see available tray icons and **Alt+click** an icon to pin it.
 - Once pinned, click either blank end to bring the picker back.
 - Right-click **+** or a blank end to change the edge, refresh icons, or exit.
-- Choose **Edit style** to change colors, icon size, padding, corner radius, or opacity. Save the file and choose **Reload style** to apply it.
+- Choose **Edit style** to change colors, icon size, padding, corner radius, or opacity. Save the file and choose **Reload style** to apply it. Set `opacity = 0` for a clear panel with fully visible icons.
 - Left and right edges stack icons. Top and bottom edges place them in a row.
 - If an icon is missing, try **Refresh icons** or reopen its app. Slack's badge can appear here when Slack includes it in its notification-area icon.
 

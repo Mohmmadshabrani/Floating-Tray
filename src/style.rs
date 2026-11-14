@@ -78,7 +78,7 @@ impl Style {
                 "edge_margin" => style.edge_margin = number(0, 80)?,
                 "trigger_size" => style.trigger_size = number(6, 32)?,
                 "font_size" => style.font_size = number(9, 28)?,
-                "opacity" => style.opacity = number(30, 100)?,
+                "opacity" => style.opacity = number(0, 100)?,
                 _ => return Err(format!("Line {}: unknown style setting '{key}'", index + 1)),
             }
         }
@@ -110,6 +110,7 @@ mod tests {
         assert_eq!(style.background, 0x56_34_12);
         assert_eq!(style.icon_size, 24);
         assert_eq!(style.opacity, 100);
+        assert_eq!(Style::parse("opacity = 0").unwrap().opacity, 0);
     }
 
     #[test]
@@ -120,7 +121,7 @@ mod tests {
                 .contains("Line 1")
         );
         assert!(
-            Style::parse("\nopacity = 0")
+            Style::parse("\nopacity = -1")
                 .unwrap_err()
                 .contains("Line 2")
         );

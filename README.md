@@ -33,7 +33,7 @@ Open **Edit style** from the dock menu. This creates and opens `%LOCALAPPDATA%\F
 | `padding`, `corner_radius` | Inner padding and rounding |
 | `edge_margin`, `trigger_size` | Distance from the display's usable edge and size of the clickable ends |
 | `font_size` | Label size |
-| `opacity` | Opacity of both windows, including the icons, from 30 to 100 percent |
+| `opacity` | Panel opacity from 0 (clear) to 100 (solid). Icons and text keep their original opacity. |
 
 Sizes are in pixels at 100% Windows scaling. For a compact dark dock, try:
 
@@ -44,8 +44,10 @@ hover = #242938
 icon_size = 16
 icon_padding = 5
 corner_radius = 8
-opacity = 92
+opacity = 40
 ```
+
+Set `opacity = 0` for a clear panel. The blank ends remain clickable so you can reopen the picker or style menu.
 
 Use roughly 16–20 pixels if your app supplies a small tray icon. Floating Tray smooths resizing and preserves icon proportions, so a low-resolution source stays recognizable when enlarged.
 
