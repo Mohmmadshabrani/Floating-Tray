@@ -3,6 +3,7 @@
 <p align="center">Keep your Windows tray icons in view, even when the taskbar is hidden.</p>
 
 <p align="center">
+  <strong><a href="https://github.com/Mohmmadshabrani/Floating-Tray/releases/latest/download/Floating-Tray-Setup-x64.exe">Download for Windows</a></strong> ·
   <a href="#install">Install</a> ·
   <a href="#controls">Controls</a> ·
   <a href="#customize">Customize</a> ·
@@ -24,9 +25,11 @@ Floating Tray is an always-on-top notification-area dock for **Windows 11 x64**,
 
 ## Install
 
-1. Download `Floating-Tray-Windows-x64.zip` from [Releases](https://github.com/Mohmmadshabrani/Floating-Tray/releases). If there’s no release ZIP yet, open a successful [Build and test run](https://github.com/Mohmmadshabrani/Floating-Tray/actions/workflows/build.yml) and download **Floating-Tray-Windows-x64** from **Artifacts**, or [build from source](#build-from-source).
-2. Extract it and keep `floating-tray.exe` and `YASBTrayHook.dll` together.
-3. Exit YASB if it’s running, then launch `floating-tray.exe`. The dock opens halfway down the right edge of your primary display.
+On **Windows 11 x64**, exit any running copy of Floating Tray or YASB. Open `Floating-Tray-Setup-x64.exe`, choose **Install**, then launch Floating Tray from the Start menu. Setup installs for your Windows account without administrator access. [Download setup](https://github.com/Mohmmadshabrani/Floating-Tray/releases/latest/download/Floating-Tray-Setup-x64.exe)
+
+For a portable copy, extract `Floating-Tray-Windows-x64.zip` and run `floating-tray.exe` with the included DLL beside it. The release page includes both options and their SHA-256 checksums. [Release downloads](https://github.com/Mohmmadshabrani/Floating-Tray/releases/latest)
+
+Setup uses Inno Setup and is currently unsigned. Windows may display a SmartScreen prompt. You can compare the downloaded file’s SHA-256 hash against `SHA256SUMS.txt` on the release page.
 
 ## Controls
 
@@ -92,7 +95,7 @@ Copy-Item .\hook\YASBTrayHook.dll .\target\release\
 .\target\release\floating-tray.exe
 ```
 
-The workflow tests on Windows and Linux and packages a Windows x64 ZIP. Tags beginning with `v` trigger release packaging. [Build and test workflow](.github/workflows/build.yml)
+The workflow tests on Windows and Linux, runs a silent install and uninstall on Windows, and packages the wizard and portable ZIP. Push a version tag to publish. To rebuild or fill in missing downloads for an existing tag, run **Build and test** manually with that tag. [Build and test workflow](.github/workflows/build.yml)
 
 ## Credits and license
 
