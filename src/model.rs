@@ -1,4 +1,9 @@
-use crate::protocol::{self, Change, IconImage};
+use crate::{
+    icon::IconImage,
+    protocol::{self, Change},
+};
+#[cfg(windows)]
+use std::cell::RefCell;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Edge {
@@ -92,6 +97,8 @@ pub struct Item {
     pub exe: String,
     pub guid: Option<[u8; 16]>,
     pub image: Option<IconImage>,
+    #[cfg(windows)]
+    pub rendered_icon: RefCell<Option<(usize, IconImage)>>,
     pub key: Option<String>,
 }
 
@@ -157,6 +164,8 @@ impl Tray {
                 exe: resolve_exe(change.window).unwrap_or_default(),
                 guid: None,
                 image: None,
+                #[cfg(windows)]
+                rendered_icon: RefCell::new(None),
                 key: None,
             });
             self.items.last_mut().unwrap()
@@ -190,6 +199,8 @@ impl Tray {
         // Many NIM_MODIFY messages only update a tooltip, callback or state.
         if let Some(image) = change.image {
             item.image = Some(image);
+            #[cfg(windows)]
+            item.rendered_icon.get_mut().take();
         }
     }
 
@@ -257,7 +268,7 @@ mod tests {
         add.image = Some(IconImage {
             width: 12,
             height: 12,
-            rgba: vec![0; 576],
+            bgra: vec![0; 576],
         });
         tray.apply(add, |_| Some(r"c:\apps\slack.exe".into()));
         let mut tip = change(protocol::MODIFY);
@@ -278,10 +289,10 @@ mod tests {
         unread.image = Some(IconImage {
             width: 1,
             height: 1,
-            rgba: vec![255, 0, 0, 255],
+            bgra: vec![0, 0, 255, 255],
         });
         tray.apply(unread, |_| None);
-        assert_eq!(tray.items[0].image.as_ref().unwrap().rgba, [255, 0, 0, 255]);
+        assert_eq!(tray.items[0].image.as_ref().unwrap().bgra, [0, 0, 255, 255]);
         assert_eq!(tray.visible(&settings), (vec![0], vec![]));
         tray.apply(change(protocol::DELETE), |_| None);
         assert!(tray.items.is_empty());

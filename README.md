@@ -15,9 +15,39 @@ A small, always-on-top notification-area dock for Windows 11 x64, written in Rus
 | Reopen the icon picker after pinning | Click either blank end of the dock |
 | Move the dock | Right-click **+** or a blank end and select an edge |
 | Interact with an app icon | Click or right-click the icon |
+| Change appearance | Right-click **+** or a blank end → **Edit style** |
+| Apply appearance changes | Right-click **+** or a blank end → **Reload style** |
 | Refresh icons or quit | Right-click **+** or a blank end |
 
 Left and right edges use a vertical stack. Top and bottom edges use a horizontal row. The dock stays clear of the reserved taskbar area. Pins and edge placement are stored in `%LOCALAPPDATA%\FloatingTray\settings.txt`.
+
+## Customize the style
+
+Open **Edit style** from the dock menu. This creates and opens `%LOCALAPPDATA%\FloatingTray\style.ini` in Notepad. Save your edits, then select **Reload style**. Pinning and edge placement are saved separately.
+
+| Setting | Controls |
+| --- | --- |
+| `background`, `border`, `hover` | Dock and picker colors in `#RRGGBB` |
+| `text`, `muted_text` | Button and picker labels in `#RRGGBB` |
+| `icon_size`, `icon_padding` | Icon size and space around each icon |
+| `padding`, `corner_radius` | Inner padding and rounding |
+| `edge_margin`, `trigger_size` | Distance from the display's usable edge and size of the clickable ends |
+| `font_size` | Label size |
+| `opacity` | Opacity of both windows, including the icons, from 30 to 100 percent |
+
+Sizes are in pixels at 100% Windows scaling. For a compact dark dock, try:
+
+```ini
+background = #111319
+border = #292E38
+hover = #242938
+icon_size = 16
+icon_padding = 5
+corner_radius = 8
+opacity = 92
+```
+
+Use roughly 16–20 pixels if your app supplies a small tray icon. Floating Tray smooths resizing and preserves icon proportions, so a low-resolution source stays recognizable when enlarged.
 
 ## Build
 
@@ -40,7 +70,7 @@ The Rust executable uses Win32 and runs without Python, Qt, YASB, or a daemon. I
 
 ## Windows smoke test
 
-Start the dock with YASB closed. Pin Slack, receive a message, and confirm the icon changes. Move the dock through all four edges, restart to confirm the saved layout, and try **Exit** from a blank end. Compare Task Manager's idle memory for `floating-tray.exe` against the prior dock on the same machine.
+Start the dock with YASB closed. Pin Slack, receive a message, and confirm the icon changes. Move the dock through all four edges. Try **Edit style** and **Reload style** at 100% and 150% display scaling, then restart to confirm the style and pins persist. Compare Task Manager's idle memory for `floating-tray.exe` against the prior dock on the same machine.
 
 ## License
 
