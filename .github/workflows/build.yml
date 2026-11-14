@@ -1,0 +1,47 @@
+name: Build and test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo fmt --check
+      - run: cargo test --locked
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo test --locked
+      - run: cargo build --release --locked
+      - name: Package Windows x64
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist | Out-Null
+          Copy-Item target/release/floating-tray.exe, hook/YASBTrayHook.dll, WINDOWS.md, LICENSE dist/
+          Copy-Item hook/LICENSE dist/HOOK-LICENSE.txt
+          Compress-Archive -Path dist/* -DestinationPath Floating-Tray-Windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Floating-Tray-Windows-x64
+          path: Floating-Tray-Windows-x64.zip
+  release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Floating-Tray-Windows-x64
+      - run: gh release create "$GITHUB_REF_NAME" Floating-Tray-Windows-x64.zip --verify-tag --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
