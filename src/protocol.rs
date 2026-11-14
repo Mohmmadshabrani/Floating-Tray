@@ -1,5 +1,7 @@
 //! Wire format used by the vendored YASB Explorer hook.
 
+use crate::icon::IconImage;
+
 const HEADER: usize = 28;
 const MAX_ICON_SIDE: usize = 256;
 pub const MAX_PACKET: usize = HEADER + 4096 + MAX_ICON_SIDE * MAX_ICON_SIDE * 4;
@@ -12,12 +14,6 @@ pub const IMAGE: u32 = 2;
 pub const TIP: u32 = 4;
 pub const STATE: u32 = 8;
 pub const GUID: u32 = 32;
-
-pub struct IconImage {
-    pub width: usize,
-    pub height: usize,
-    pub rgba: Vec<u8>,
-}
 
 pub struct Change {
     pub operation: u32,
@@ -109,7 +105,11 @@ fn parse_change(bytes: &[u8]) -> Option<Change> {
         {
             return None;
         }
-        Some(resize_icon(bytes.get(payload_end..)?, width, height))
+        Some(IconImage::from_rgba(
+            bytes.get(payload_end..)?,
+            width,
+            height,
+        ))
     } else {
         None
     };
@@ -131,32 +131,6 @@ fn parse_change(bytes: &[u8]) -> Option<Change> {
         guid,
         image,
     })
-}
-
-fn resize_icon(rgba: &[u8], width: usize, height: usize) -> IconImage {
-    const MAX_STORED_SIDE: usize = 64;
-    let longest = width.max(height);
-    if longest <= MAX_STORED_SIDE {
-        return IconImage {
-            width,
-            height,
-            rgba: rgba.to_vec(),
-        };
-    }
-    let out_width = (width * MAX_STORED_SIDE / longest).max(1);
-    let out_height = (height * MAX_STORED_SIDE / longest).max(1);
-    let mut out = Vec::with_capacity(4 * out_width * out_height);
-    for y in 0..out_height {
-        for x in 0..out_width {
-            let offset = 4 * (y * height / out_height * width + x * width / out_width);
-            out.extend_from_slice(&rgba[offset..offset + 4]);
-        }
-    }
-    IconImage {
-        width: out_width,
-        height: out_height,
-        rgba: out,
-    }
 }
 
 fn word(bytes: &[u8], offset: usize) -> Option<u32> {
@@ -207,7 +181,7 @@ mod tests {
         assert_eq!((change.window, change.id, change.callback), (17, 4, 0x8011));
         assert_eq!(change.tooltip, "S");
         assert_eq!(change.guid.unwrap()[0], 7);
-        assert_eq!(change.image.unwrap().rgba, [255, 0, 0, 255]);
+        assert_eq!(change.image.unwrap().bgra, [0, 0, 255, 255]);
         let Some(Packet::Change(change)) = parse(&sample(SET_VERSION, 0, &[])) else {
             panic!("missing version")
         };

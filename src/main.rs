@@ -3,9 +3,13 @@
 #[cfg(windows)]
 mod hook;
 #[cfg(any(windows, test))]
+mod icon;
+#[cfg(any(windows, test))]
 mod model;
 #[cfg(any(windows, test))]
 mod protocol;
+#[cfg(any(windows, test))]
+mod style;
 #[cfg(windows)]
 mod windows;
 
