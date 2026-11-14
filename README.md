@@ -23,6 +23,14 @@ Floating Tray is an always-on-top notification-area dock for **Windows 11 x64**,
 - **A clear panel with fully visible icons.** Set the background to transparent or tint it to match your desktop.
 - **Portable.** Extract and run the Windows build. The ZIP includes everything the dock needs.
 
+## Why I built Floating Tray
+
+I keep my Windows taskbar set to auto-hide. When Slack showed a red dot for an unread message, I had to reveal the taskbar to see it. I wanted to keep Slack and a few other tray icons visible while the taskbar stayed hidden.
+
+I started with YASB’s Systray widget and adapted it into a vertical dock halfway down the right edge of my screen. That setup used about 52 MB of RAM at idle on my PC. For something I’d keep running all day, I wanted a smaller app dedicated to the tray. [YASB](https://github.com/amnweb/yasb)
+
+I built Floating Tray in Rust with Win32 and kept YASB’s native Explorer hook for live icon updates. I can pin the apps I care about and choose whether the dock sits vertically or horizontally. [Explorer hook](hook/README.md)
+
 ## Install
 
 On **Windows 11 x64**, exit any running copy of Floating Tray or YASB. Open `Floating-Tray-Setup-x64.exe`, choose **Install**, then launch Floating Tray from the Start menu. Setup installs for your Windows account without administrator access. [Download setup](https://github.com/Mohmmadshabrani/Floating-Tray/releases/latest/download/Floating-Tray-Setup-x64.exe)
